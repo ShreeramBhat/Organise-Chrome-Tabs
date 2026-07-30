@@ -70,18 +70,30 @@ const chromeProcess = spawn(
     `--user-data-dir=${profilePath}`,
     "--headless=new",
     "--disable-gpu",
+    "--disable-dev-shm-usage",
     "--no-first-run",
+    "--remote-allow-origins=*",
     ...(typeof process.getuid === "function" && process.getuid() === 0
       ? ["--no-sandbox"]
       : []),
     `--remote-debugging-port=${debuggingPort}`,
     "about:blank",
   ],
-  { stdio: "ignore" },
+  { stdio: ["ignore", "ignore", "pipe"] },
 );
 
+let chromeStderr = "";
+chromeProcess.stderr.on("data", (chunk) => {
+  chromeStderr = `${chromeStderr}${chunk}`.slice(-8000);
+});
+
 async function waitForTargets() {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
+  for (let attempt = 0; attempt < 150; attempt += 1) {
+    if (chromeProcess.exitCode !== null) {
+      throw new Error(
+        `Chrome exited before exposing its test target.\n${chromeStderr}`,
+      );
+    }
     try {
       const response = await fetch(
         `http://127.0.0.1:${debuggingPort}/json/list`,
@@ -92,7 +104,9 @@ async function waitForTargets() {
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error("Chrome did not expose its test target.");
+  throw new Error(
+    `Chrome did not expose its test target within 15 seconds.\n${chromeStderr}`,
+  );
 }
 
 function cdpClient(webSocketUrl) {
