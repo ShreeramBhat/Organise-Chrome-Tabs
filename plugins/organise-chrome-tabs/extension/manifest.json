@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Steward",
+  "version": "0.2.0",
+  "description": "Preview and safely organize Chrome tabs into topic-based windows.",
+  "minimum_chrome_version": "120",
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Open Tab Steward"
+  }
+}

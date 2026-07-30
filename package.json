@@ -1,0 +1,20 @@
+{
+  "name": "organise-chrome-tabs",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "A local-first Chrome extension and agent workflow for safely organising tabs into windows.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ShreeramBhat/Organise-Chrome-Tabs.git"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test plugins/organise-chrome-tabs/extension/tests/*.test.js",
+    "test:ui": "node plugins/organise-chrome-tabs/extension/tests/ui-smoke.mjs",
+    "check": "node --check plugins/organise-chrome-tabs/extension/background.js && node --check plugins/organise-chrome-tabs/extension/dashboard.js && node --check plugins/organise-chrome-tabs/extension/lib/classifier.js && node --check plugins/organise-chrome-tabs/extension/lib/planner.js && node --check plugins/organise-chrome-tabs/extension/lib/agent-plan.js"
+  }
+}

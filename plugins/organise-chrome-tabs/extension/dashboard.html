@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tab Steward</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">LOCAL CHROME ORGANIZER</p>
+        <h1>Tab Steward</h1>
+        <p class="subtitle">Understand first. Move once. Keep an undo path.</p>
+      </div>
+      <div class="header-actions">
+        <button id="refreshButton" class="button secondary">Refresh</button>
+        <button id="undoButton" class="button ghost" disabled>Undo last change</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="statusBanner" class="status hidden" role="status"></section>
+
+      <section class="panel overview-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">CURRENT BROWSER</p>
+            <h2>Windows</h2>
+          </div>
+          <form id="createWindowForm" class="inline-form">
+            <label class="sr-only" for="newWindowLabel">New window label</label>
+            <input id="newWindowLabel" type="text" maxlength="80" placeholder="New window label">
+            <button class="button secondary" type="submit">Create window</button>
+          </form>
+          <button id="removeGroupsButton" class="button ghost" disabled>
+            Remove all groups
+          </button>
+        </div>
+        <div id="browserStats" class="stats"></div>
+        <div id="windowsList" class="windows-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">LOCAL ANALYSIS</p>
+            <h2>Build an organization plan</h2>
+          </div>
+          <button id="analyzeButton" class="button primary">Analyse tabs</button>
+        </div>
+
+        <div class="options-grid">
+          <label>
+            Window strategy
+            <select id="strategy">
+              <option value="topic-windows">Reuse or create topic windows</option>
+              <option value="keep-windows">Keep tabs in their current windows</option>
+            </select>
+          </label>
+          <label>
+            Minimum tabs for a new window
+            <input id="minWindowSize" type="number" min="2" max="20" value="3">
+          </label>
+          <label>
+            Minimum tabs for a group
+            <input id="minGroupSize" type="number" min="1" max="20" value="2">
+          </label>
+          <label class="check-option">
+            <input id="reuseWindows" type="checkbox" checked>
+            Reuse suitable existing windows
+          </label>
+          <label class="check-option">
+            <input id="createGroups" type="checkbox">
+            Create native tab groups after moving
+          </label>
+          <label class="check-option">
+            <input id="removeExistingGroups" type="checkbox" checked>
+            Remove existing native groups while applying
+          </label>
+          <label class="check-option">
+            <input id="closeDuplicates" type="checkbox">
+            Propose closing exact duplicate URLs
+          </label>
+        </div>
+
+        <p class="privacy-note">
+          Local analysis uses tab titles and URLs only. Agent-assisted analysis may
+          inspect page content through your configured browser tools and model.
+        </p>
+      </section>
+
+      <section id="planSection" class="panel hidden">
+        <div class="section-heading plan-heading">
+          <div>
+            <p class="eyebrow">REVIEW BEFORE APPLYING</p>
+            <h2>Proposed plan</h2>
+          </div>
+          <div class="header-actions">
+            <form id="addDestinationForm" class="inline-form">
+              <label class="sr-only" for="destinationName">Additional window</label>
+              <input id="destinationName" type="text" maxlength="80" placeholder="Add proposed window">
+              <button class="button secondary" type="submit">Add</button>
+            </form>
+            <button id="applyButton" class="button primary">Apply plan</button>
+          </div>
+        </div>
+        <div id="planStats" class="stats"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Close</th>
+                <th>Tab and description</th>
+                <th>Current window</th>
+                <th>Destination</th>
+                <th>Native group</th>
+                <th>Signal</th>
+              </tr>
+            </thead>
+            <tbody id="planRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <template id="statTemplate">
+      <div class="stat">
+        <strong></strong>
+        <span></span>
+      </div>
+    </template>
+
+    <script type="module" src="dashboard.js"></script>
+  </body>
+</html>

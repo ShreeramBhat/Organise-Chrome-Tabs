@@ -1,0 +1,37 @@
+{
+  "name": "organise-chrome-tabs",
+  "version": "0.2.0",
+  "description": "Safely inspect and organise live Chrome tabs into topic-based windows.",
+  "author": {
+    "name": "Shreeram V Bhat",
+    "url": "https://github.com/ShreeramBhat"
+  },
+  "homepage": "https://github.com/ShreeramBhat/Organise-Chrome-Tabs",
+  "repository": "https://github.com/ShreeramBhat/Organise-Chrome-Tabs",
+  "license": "MIT",
+  "keywords": [
+    "chrome",
+    "tabs",
+    "windows",
+    "productivity",
+    "browser-automation"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Organise Chrome Tabs",
+    "shortDescription": "Safely sort Chrome tabs into topic windows.",
+    "longDescription": "Inspect live Chrome tabs with DevTools, preview a typed organisation plan, and apply moves through a local extension with undo support.",
+    "developerName": "Shreeram V Bhat",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Organise my Chrome tabs into topic-based windows.",
+      "Describe my open tabs without changing anything.",
+      "Consolidate duplicate Chrome windows safely."
+    ]
+  }
+}

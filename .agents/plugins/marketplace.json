@@ -1,0 +1,20 @@
+{
+  "name": "organise-chrome-tabs",
+  "interface": {
+    "displayName": "Organise Chrome Tabs"
+  },
+  "plugins": [
+    {
+      "name": "organise-chrome-tabs",
+      "source": {
+        "source": "local",
+        "path": "./plugins/organise-chrome-tabs"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
