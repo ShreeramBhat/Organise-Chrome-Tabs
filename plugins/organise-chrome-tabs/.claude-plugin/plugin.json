@@ -1,0 +1,19 @@
+{
+  "name": "organise-chrome-tabs",
+  "version": "0.3.0",
+  "description": "Safely inspect and organise live Chrome tabs into topic-based windows. Classifies tabs semantically, previews a typed plan, and applies moves through the local Tab Steward extension with undo support.",
+  "author": {
+    "name": "Shreeram V Bhat",
+    "url": "https://github.com/ShreeramBhat"
+  },
+  "homepage": "https://github.com/ShreeramBhat/Organise-Chrome-Tabs",
+  "repository": "https://github.com/ShreeramBhat/Organise-Chrome-Tabs",
+  "license": "MIT",
+  "keywords": [
+    "chrome",
+    "tabs",
+    "windows",
+    "productivity",
+    "browser-automation"
+  ]
+}

@@ -43,7 +43,8 @@ flowchart LR
 
 - Google Chrome 144 or newer for Chrome DevTools MCP auto-connect.
 - Node.js 20 or newer.
-- Codex CLI, or another MCP-capable agent that supports agent skills.
+- Codex CLI, Claude Code, or another MCP-capable agent that supports agent
+  skills.
 
 ## Install
 
@@ -99,16 +100,37 @@ codex plugin add organise-chrome-tabs@organise-chrome-tabs
 Start a new Codex session after installation. Confirm the plugin and browser
 tools with `/plugins` and `/mcp`.
 
+### 4. Or install the Claude Code plugin
+
+Inside a Claude Code session, add the marketplace and install the plugin:
+
+```text
+/plugin marketplace add ShreeramBhat/Organise-Chrome-Tabs
+/plugin install organise-chrome-tabs@organise-chrome-tabs
+```
+
+To install from a local clone, pass the repository path instead of the GitHub
+slug in the `marketplace add` step. Start a new session afterwards; the
+`organize-chrome-tabs` skill and the bundled `chrome-devtools` MCP server load
+automatically.
+
 If you only want the standalone skill, copy or symlink
 `plugins/organise-chrome-tabs/skills/organize-chrome-tabs` into
-`~/.agents/skills/`.
+`~/.agents/skills/` (Codex) or `~/.claude/skills/` (Claude Code), and register
+the Chrome DevTools MCP server yourself.
 
 ## Use
 
-Invoke the skill explicitly:
+Invoke the skill explicitly in Codex:
 
 ```text
 $organize-chrome-tabs Organize my Chrome tabs into topic-based windows. Do not close anything.
+```
+
+In Claude Code, plain language is enough — the skill triggers on requests like:
+
+```text
+Organise my Chrome tabs into topic-based windows. Do not close anything.
 ```
 
 Other useful prompts:

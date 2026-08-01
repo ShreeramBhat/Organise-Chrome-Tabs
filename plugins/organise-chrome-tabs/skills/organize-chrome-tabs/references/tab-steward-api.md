@@ -2,9 +2,9 @@
 
 ## Responsibility boundary
 
-In AI-driven mode, Codex owns semantic classification and every destination
-decision. Tab Steward owns inventory, proposal validation, canonicalization,
-Chrome mutations, and undo.
+In AI-driven mode, the AI agent owns semantic classification and every
+destination decision. Tab Steward owns inventory, proposal validation,
+canonicalization, Chrome mutations, and undo.
 
 Do not click **Analyse tabs** or import `lib/classifier.js` or `lib/planner.js`
 in AI-driven mode. Those components are the manual local fallback.

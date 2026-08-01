@@ -1,0 +1,24 @@
+{
+  "name": "organise-chrome-tabs",
+  "description": "Safely inspect and organise live Chrome tabs into topic-based windows with Chrome DevTools MCP and the Tab Steward extension.",
+  "owner": {
+    "name": "Shreeram V Bhat",
+    "url": "https://github.com/ShreeramBhat"
+  },
+  "plugins": [
+    {
+      "name": "organise-chrome-tabs",
+      "source": "./plugins/organise-chrome-tabs",
+      "description": "Safely inspect and organise live Chrome tabs into topic-based windows with Chrome DevTools MCP and the Tab Steward extension.",
+      "version": "0.3.0",
+      "category": "productivity",
+      "keywords": [
+        "chrome",
+        "tabs",
+        "windows",
+        "productivity",
+        "browser-automation"
+      ]
+    }
+  ]
+}

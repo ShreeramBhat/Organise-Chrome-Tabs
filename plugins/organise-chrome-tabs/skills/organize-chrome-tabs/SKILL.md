@@ -6,10 +6,10 @@ description: >-
   describe, sort, triage, move, consolidate, clean, or reorganize Chrome tabs;
   create, focus, label, or close Chrome windows; remove native tab groups;
   identify duplicates; distinguish pages from the same site by topic; or
-  perform browser hygiene. AI-driven mode is the primary default: Codex owns
-  every topic and destination decision, while Tab Steward previews, validates,
-  applies, and undoes the reviewed plan. Treat local analysis as a manual
-  backup for use without an AI.
+  perform browser hygiene. AI-driven mode is the primary default: the AI agent
+  owns every topic and destination decision, while Tab Steward previews,
+  validates, applies, and undoes the reviewed plan. Treat local analysis as a
+  manual backup for use without an AI.
 ---
 
 # Organize Chrome Tabs
