@@ -367,10 +367,61 @@ async function analyze() {
   }
 }
 
+function planToProposal(plan) {
+  const assignments = [];
+  for (const row of plan.rows) {
+    if (row.protected) continue;
+    const assignment = { tabId: row.tabId };
+    let changed = false;
+    if (row.close) {
+      assignment.close = true;
+      changed = true;
+    }
+    if (
+      !row.close &&
+      row.movable &&
+      row.destinationKey !== `existing:${row.windowId}`
+    ) {
+      assignment.destination = row.destinationKey.startsWith("new:")
+        ? { newWindow: row.destinationKey.slice(4) }
+        : { windowId: Number(row.destinationKey.slice("existing:".length)) };
+      changed = true;
+    }
+    const groupTitle = (row.groupTitle || "").trim();
+    if (!row.close && !row.pinned && groupTitle) {
+      assignment.groupTitle = groupTitle;
+      if (row.groupColor) assignment.groupColor = row.groupColor;
+      changed = true;
+    }
+    if (changed) assignments.push(assignment);
+  }
+  return {
+    version: 1,
+    removeExistingGroups: Boolean(plan.options?.removeExistingGroups),
+    assignments,
+  };
+}
+
 async function applyPlan() {
   if (!state.plan) return;
   updatePlanSummary();
-  const { closeCount, moveCount, newWindowCount } = state.plan.summary;
+
+  // Every apply goes through the preview pipeline so the service worker only
+  // ever executes a plan it validated and canonicalized itself.
+  setBusy(true, "Validating the reviewed plan…");
+  let preview;
+  try {
+    preview = await send("PREVIEW_AGENT_PLAN", {
+      proposal: planToProposal(state.plan),
+    });
+  } catch (error) {
+    showStatus(error.message, "error");
+    setBusy(false);
+    return;
+  }
+  setBusy(false);
+
+  const { closeCount, moveCount, newWindowCount } = preview.summary;
   const destructiveText = closeCount
     ? ` This will also close ${closeCount} tab${closeCount === 1 ? "" : "s"}.`
     : "";
@@ -381,7 +432,7 @@ async function applyPlan() {
 
   setBusy(true, "Applying the reviewed plan…");
   try {
-    const result = await send("APPLY_PLAN", { plan: state.plan });
+    const result = await send("APPLY_PLAN", { plan: preview.plan });
     state.inventory = result.inventory;
     state.plan = null;
     elements.planSection.classList.add("hidden");
@@ -518,5 +569,33 @@ elements.addDestinationForm.addEventListener("submit", (event) => {
   elements.destinationName.value = "";
   renderPlan();
 });
+
+// Keep the dashboard in sync with tab/window changes made outside this page
+// (drags, agent-driven applies, other windows). Optional chaining keeps the
+// headless UI smoke test, whose chrome mock has no event APIs, working.
+let liveRefreshTimer = null;
+function scheduleLiveRefresh() {
+  if (liveRefreshTimer) clearTimeout(liveRefreshTimer);
+  liveRefreshTimer = setTimeout(() => {
+    liveRefreshTimer = null;
+    if (!state.busy) refreshInventory({ quiet: true });
+  }, 400);
+}
+
+for (const event of [
+  chrome.tabs?.onCreated,
+  chrome.tabs?.onRemoved,
+  chrome.tabs?.onUpdated,
+  chrome.tabs?.onMoved,
+  chrome.tabs?.onAttached,
+  chrome.tabs?.onDetached,
+  chrome.windows?.onCreated,
+  chrome.windows?.onRemoved,
+  chrome.tabGroups?.onCreated,
+  chrome.tabGroups?.onUpdated,
+  chrome.tabGroups?.onRemoved,
+]) {
+  event?.addListener(scheduleLiveRefresh);
+}
 
 refreshInventory();

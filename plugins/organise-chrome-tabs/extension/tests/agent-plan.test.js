@@ -48,6 +48,16 @@ function makeInventory() {
             title: "Tab Steward",
             url: "chrome-extension://test/dashboard.html",
           },
+          {
+            id: 4,
+            windowId: 20,
+            index: 1,
+            active: false,
+            pinned: false,
+            groupId: -1,
+            title: "Survey paper",
+            url: "https://arxiv.org/abs/5678",
+          },
         ],
       },
     ],
@@ -63,7 +73,7 @@ test("agent proposal changes only assigned tabs and coalesces new windows", () =
         destination: { newWindow: "Research" },
       },
       {
-        tabId: 3,
+        tabId: 4,
         destination: { newWindow: "Research" },
       },
     ],
@@ -133,6 +143,16 @@ test("agent proposal rejects unsafe or stale assignments", () => {
         ],
       }),
     /cannot close its own dashboard/,
+  );
+  assert.throws(
+    () =>
+      buildAgentPlan(makeInventory(), {
+        version: 1,
+        assignments: [
+          { tabId: 3, destination: { newWindow: "Elsewhere" } },
+        ],
+      }),
+    /cannot move its own dashboard/,
   );
 });
 

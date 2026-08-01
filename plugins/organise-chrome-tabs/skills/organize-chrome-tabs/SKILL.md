@@ -62,8 +62,11 @@ rough proposal requiring human review.
    extension and open `dashboard.html`. Never assume a fixed extension ID.
 3. Select the dashboard and take a fresh DevTools snapshot before evaluating
    scripts in its context.
-4. Request `GET_INVENTORY` with a no-argument `evaluate_script` function. Record
-   window, tab, group, and pinned-tab counts plus every tab ID and membership.
+4. Request `GET_INVENTORY` with a no-argument `evaluate_script` function. Verify
+   the returned `version` is 0.3.0 or newer; if it is missing or any message
+   resolves to `undefined`, the loaded build is stale — ask the user to reload
+   the extension and stop. Record window, tab, group, and pinned-tab counts plus
+   every tab ID and membership.
 5. Classify tabs by task or topic. Inspect ambiguous PDFs, generic YouTube pages,
    weak titles, and unclear search results individually.
 6. Build a version 1 AI proposal containing only tabs whose destination, group,
@@ -97,7 +100,8 @@ rough proposal requiring human review.
 - Distinguish broad context from the most useful working topic. For example,
   Apple documentation can belong to IOSurface research, Core Animation, or
   Apple Silicon optimization; `developer.apple.com` is not itself a topic.
-- Inspect PDFs whose filenames do not reveal their subjects.
+- Inspect PDFs whose filenames do not reveal their subjects. Chrome's PDF
+  viewer exposes no DOM text, so read them from a screenshot, not `innerText`.
 - Inspect generic YouTube pages and weak video titles individually.
 - Use a search query's research intent, not merely `google.com`.
 - Prefer a few durable windows over needless one-tab windows.
@@ -109,7 +113,11 @@ rough proposal requiring human review.
 
 ## Safety and recovery
 
-- `PREVIEW_AGENT_PLAN` is read-only. Use it before every AI-authored apply.
+- `PREVIEW_AGENT_PLAN` is read-only. Use it before every apply; the extension
+  rejects any plan that does not match its most recent preview.
+- Never click dashboard buttons. Apply, undo, and close use blocking confirm
+  dialogs that freeze the page and every later evaluated script. The dashboard
+  refreshes its own display after changes.
 - Keep the canonical plan only in the dashboard page between preview and apply.
   If the page reloads, navigates, or closes, preview again.
 - Never move the dashboard tab during `APPLY_PLAN`; doing so can detach the

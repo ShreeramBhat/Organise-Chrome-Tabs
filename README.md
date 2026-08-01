@@ -176,8 +176,9 @@ for the complete message table and recovery semantics.
 
 ## Safety model
 
-- **Preview first:** `PREVIEW_AGENT_PLAN` validates a proposal without changing
-  Chrome.
+- **Preview first, enforced:** `PREVIEW_AGENT_PLAN` validates a proposal
+  without changing Chrome, and `APPLY_PLAN` only accepts the exact plan returned
+  by the most recent preview.
 - **Single mutation boundary:** only Tab Steward calls Chrome's tab, group, and
   window APIs.
 - **No host permissions:** the extension cannot read page bodies.

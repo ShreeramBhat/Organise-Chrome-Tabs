@@ -22,6 +22,12 @@ const mock = createChromeMock({
           title: "Notes",
           url: "https://example.com/notes",
         },
+        {
+          id: 3,
+          index: 2,
+          title: "Unrelated reading",
+          url: "https://example.com/reading",
+        },
       ],
     },
   ],
@@ -30,7 +36,7 @@ const mock = createChromeMock({
 globalThis.chrome = mock.chrome;
 await import("../background.js");
 
-test("service worker rejects a stale preview before saving an undo snapshot", async () => {
+test("unrelated tab churn after preview does not invalidate the plan", async () => {
   const preview = await mock.dispatch({
     type: "PREVIEW_AGENT_PLAN",
     proposal: {
@@ -39,6 +45,33 @@ test("service worker rejects a stale preview before saving an undo snapshot", as
         {
           tabId: 1,
           destination: { newWindow: "Research" },
+        },
+      ],
+    },
+  });
+
+  await mock.chrome.tabs.remove(3);
+
+  const applied = await mock.dispatch({
+    type: "APPLY_PLAN",
+    plan: preview.plan,
+  });
+  const moved = applied.inventory.windows
+    .flatMap((window) => window.tabs)
+    .find((tab) => tab.id === 1);
+  assert.notEqual(moved.windowId, 10);
+  assert.equal(applied.inventory.windows.length, 2);
+});
+
+test("apply rejects a stale preview when a planned tab vanishes", async () => {
+  const preview = await mock.dispatch({
+    type: "PREVIEW_AGENT_PLAN",
+    proposal: {
+      version: 1,
+      assignments: [
+        {
+          tabId: 2,
+          destination: { newWindow: "More Research" },
         },
       ],
     },
@@ -54,11 +87,13 @@ test("service worker rejects a stale preview before saving an undo snapshot", as
     /plan is stale/,
   );
 
-  const inventory = await mock.dispatch({ type: "GET_INVENTORY" });
-  assert.equal(inventory.windows.length, 1);
-  assert.equal(inventory.windows[0].tabs[0].windowId, 10);
-  assert.equal(
-    (await mock.dispatch({ type: "GET_UNDO_STATE" })).available,
-    false,
+  // A stale failure clears the pending plan, so retrying the same apply must
+  // demand a fresh preview instead of running against the changed browser.
+  await assert.rejects(
+    mock.dispatch({
+      type: "APPLY_PLAN",
+      plan: preview.plan,
+    }),
+    /previewed/,
   );
 });

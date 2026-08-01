@@ -30,51 +30,34 @@ const mock = createChromeMock({
 globalThis.chrome = mock.chrome;
 await import("../background.js");
 
-function rows(groupTitle, currentGroupId = -1) {
-  return [1, 2].map((tabId) => ({
-    tabId,
-    windowId: 10,
-    title: `Tab ${tabId}`,
-    url: `https://example.com/${tabId}`,
-    pinned: false,
-    movable: true,
-    protected: false,
-    close: false,
-    currentGroupId,
-    destinationKey: "existing:10",
-    groupTitle,
-    groupColor: "blue",
-  }));
-}
-
-function plan(planRows, options = {}) {
-  return {
-    options,
-    destinations: [
-      {
-        key: "existing:10",
-        label: "Window 1",
-        kind: "existing",
-        windowId: 10,
-      },
-    ],
-    rows: planRows,
-  };
-}
-
 test("apply removes existing groups in the same undoable operation", async () => {
-  await mock.dispatch({
-    type: "APPLY_PLAN",
-    plan: plan(rows("Research")),
+  const groupPreview = await mock.dispatch({
+    type: "PREVIEW_AGENT_PLAN",
+    proposal: {
+      version: 1,
+      removeExistingGroups: false,
+      assignments: [
+        { tabId: 1, groupTitle: "Research", groupColor: "blue" },
+        { tabId: 2, groupTitle: "Research", groupColor: "blue" },
+      ],
+    },
   });
+  await mock.dispatch({ type: "APPLY_PLAN", plan: groupPreview.plan });
   const grouped = await mock.dispatch({ type: "GET_INVENTORY" });
   const groupedTabs = grouped.windows.flatMap((window) => window.tabs);
   assert.ok(groupedTabs.every((tab) => tab.groupId !== -1));
-  const groupId = groupedTabs[0].groupId;
 
+  const ungroupPreview = await mock.dispatch({
+    type: "PREVIEW_AGENT_PLAN",
+    proposal: {
+      version: 1,
+      removeExistingGroups: true,
+      assignments: [],
+    },
+  });
   const result = await mock.dispatch({
     type: "APPLY_PLAN",
-    plan: plan(rows("", groupId), { removeExistingGroups: true }),
+    plan: ungroupPreview.plan,
   });
   const ungroupedTabs = result.inventory.windows.flatMap(
     (window) => window.tabs,

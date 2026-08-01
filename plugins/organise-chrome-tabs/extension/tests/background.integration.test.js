@@ -43,60 +43,35 @@ const mock = createChromeMock({
 globalThis.chrome = mock.chrome;
 await import("../background.js");
 
-function planRow(tab, overrides = {}) {
-  return {
-    tabId: tab.id,
-    windowId: tab.windowId,
-    title: tab.title,
-    url: tab.url,
-    pinned: false,
-    movable: true,
-    protected: false,
-    close: false,
-    currentGroupId: -1,
-    destinationKey: `existing:${tab.windowId}`,
-    groupTitle: "",
-    groupColor: "grey",
-    ...overrides,
-  };
-}
-
-test("service worker applies a cross-window plan and restores it", async () => {
+test("service worker applies a previewed cross-window plan and restores it", async () => {
   const before = await mock.dispatch({ type: "GET_INVENTORY" });
   assert.equal(before.windows.length, 2);
   assert.equal(before.windows.flatMap((window) => window.tabs).length, 3);
+  assert.equal(before.version, "0.3.0");
 
-  const tabs = before.windows.flatMap((window) => window.tabs);
-  const plan = {
-    destinations: [
-      {
-        key: "existing:20",
-        label: "AI",
-        kind: "existing",
-        windowId: 20,
-      },
-      {
-        key: "new:Research",
-        label: "Research",
-        kind: "new",
-      },
-    ],
-    rows: [
-      planRow(tabs.find((tab) => tab.id === 1), {
-        destinationKey: "new:Research",
-        groupTitle: "Papers",
-        groupColor: "blue",
-      }),
-      planRow(tabs.find((tab) => tab.id === 2), {
-        destinationKey: "new:Research",
-        groupTitle: "Papers",
-        groupColor: "blue",
-      }),
-      planRow(tabs.find((tab) => tab.id === 3)),
-    ],
-  };
+  const preview = await mock.dispatch({
+    type: "PREVIEW_AGENT_PLAN",
+    proposal: {
+      version: 1,
+      assignments: [
+        {
+          tabId: 1,
+          destination: { newWindow: "Research" },
+          groupTitle: "Papers",
+          groupColor: "blue",
+        },
+        {
+          tabId: 2,
+          destination: { newWindow: "Research" },
+          groupTitle: "Papers",
+          groupColor: "blue",
+        },
+      ],
+    },
+  });
+  assert.ok(preview.plan.applyToken);
 
-  const applied = await mock.dispatch({ type: "APPLY_PLAN", plan });
+  const applied = await mock.dispatch({ type: "APPLY_PLAN", plan: preview.plan });
   const appliedTabs = applied.inventory.windows.flatMap((window) => window.tabs);
   const movedOne = appliedTabs.find((tab) => tab.id === 1);
   const movedTwo = appliedTabs.find((tab) => tab.id === 2);
@@ -172,24 +147,68 @@ test("service worker previews an agent plan without mutating Chrome", async () =
   await mock.dispatch({ type: "UNDO_LAST" });
 });
 
-test("service worker snapshots a manually closed window and can recover it", async () => {
-  const current = await mock.dispatch({ type: "GET_INVENTORY" });
-  const windowWithClaude = current.windows.find((window) =>
-    window.tabs.some((tab) => tab.url === "https://claude.ai/"),
+test("apply rejects plans that were not previewed or were tampered with", async () => {
+  await assert.rejects(
+    mock.dispatch({
+      type: "APPLY_PLAN",
+      plan: { destinations: [], rows: [] },
+    }),
+    /previewed/,
   );
-  assert.ok(windowWithClaude);
 
-  const afterClose = await mock.dispatch({
-    type: "CLOSE_WINDOW",
-    windowId: windowWithClaude.id,
+  const preview = await mock.dispatch({
+    type: "PREVIEW_AGENT_PLAN",
+    proposal: {
+      version: 1,
+      assignments: [{ tabId: 2, destination: { newWindow: "Notes" } }],
+    },
   });
-  assert.equal(afterClose.windows.length, 1);
+  const tampered = structuredClone(preview.plan);
+  tampered.rows.find((row) => row.tabId === 2).close = true;
 
-  const afterUndo = await mock.dispatch({ type: "UNDO_LAST" });
-  assert.equal(afterUndo.inventory.windows.length, 2);
-  assert.ok(
-    afterUndo.inventory.windows
-      .flatMap((window) => window.tabs)
-      .some((tab) => tab.url === "https://claude.ai/"),
+  await assert.rejects(
+    mock.dispatch({ type: "APPLY_PLAN", plan: tampered }),
+    /does not match/,
+  );
+});
+
+test("proposals cannot move or close the dashboard tab", async () => {
+  const dashboardTab = await mock.chrome.tabs.create({
+    windowId: 20,
+    url: "chrome-extension://test-extension/dashboard.html",
+  });
+  await mock.chrome.tabs.update(dashboardTab.id, { title: "Tab Steward" });
+
+  await assert.rejects(
+    mock.dispatch({
+      type: "PREVIEW_AGENT_PLAN",
+      proposal: {
+        version: 1,
+        assignments: [
+          { tabId: dashboardTab.id, destination: { newWindow: "Elsewhere" } },
+        ],
+      },
+    }),
+    /cannot move its own dashboard/,
+  );
+
+  await assert.rejects(
+    mock.dispatch({
+      type: "PREVIEW_AGENT_PLAN",
+      proposal: {
+        version: 1,
+        assignments: [{ tabId: dashboardTab.id, close: true }],
+      },
+    }),
+    /cannot close its own dashboard/,
+  );
+
+  await mock.chrome.tabs.remove(dashboardTab.id);
+});
+
+test("unknown message types receive an explicit error", async () => {
+  await assert.rejects(
+    mock.dispatch({ type: "BOGUS_MESSAGE" }),
+    /Unknown message type "BOGUS_MESSAGE"/,
   );
 });

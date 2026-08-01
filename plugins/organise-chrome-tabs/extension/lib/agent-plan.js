@@ -129,6 +129,12 @@ export function buildAgentPlan(inventory, proposal = {}) {
           `Tab ${tabId} destination must specify either windowId or newWindow.`,
         );
       }
+      if (
+        row.protected &&
+        (hasNewWindow || destination.windowId !== row.windowId)
+      ) {
+        throw new Error("Tab Steward cannot move its own dashboard.");
+      }
 
       if (hasWindowId) {
         const windowId = requireInteger(

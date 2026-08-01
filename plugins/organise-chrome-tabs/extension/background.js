@@ -3,6 +3,36 @@ import { buildAgentPlan } from "./lib/agent-plan.js";
 const DASHBOARD_URL = chrome.runtime.getURL("dashboard.html");
 const SNAPSHOT_KEY = "lastOrganizationSnapshot";
 const WINDOW_LABELS_KEY = "windowLabels";
+const PENDING_PLAN_KEY = "pendingCanonicalPlan";
+
+// storage.session is unavailable in the test harness's chrome mock.
+function planStore() {
+  return chrome.storage.session ?? chrome.storage.local;
+}
+
+async function storePendingPlan(plan) {
+  await planStore().set({
+    [PENDING_PLAN_KEY]: { planJson: JSON.stringify(plan), storedAt: Date.now() },
+  });
+}
+
+async function clearPendingPlan() {
+  await planStore().remove(PENDING_PLAN_KEY);
+}
+
+async function assertPlanWasPreviewed(plan) {
+  const stored = (await planStore().get(PENDING_PLAN_KEY))[PENDING_PLAN_KEY];
+  if (!stored) {
+    throw new Error(
+      "No previewed plan is pending. Send PREVIEW_AGENT_PLAN first, then apply the returned canonical plan unchanged.",
+    );
+  }
+  if (JSON.stringify(plan) !== stored.planJson) {
+    throw new Error(
+      "This plan does not match the previewed canonical plan. Preview again and apply the returned plan unchanged.",
+    );
+  }
+}
 
 async function getStoredWindowLabels() {
   const result = await chrome.storage.local.get(WINDOW_LABELS_KEY);
@@ -32,6 +62,7 @@ async function getInventory() {
 
   return {
     capturedAt: Date.now(),
+    version: chrome.runtime.getManifest().version,
     windows: windows.map((window) => ({
       id: window.id,
       focused: window.focused,
@@ -180,6 +211,9 @@ function validatePlan(plan) {
     if (row.protected && row.close) {
       throw new Error("Tab Steward cannot close its own dashboard.");
     }
+    if (row.protected && row.destinationKey !== `existing:${row.windowId}`) {
+      throw new Error("Tab Steward cannot move its own dashboard.");
+    }
     if (row.pinned && row.destinationKey !== `existing:${row.windowId}`) {
       throw new Error("Pinned tabs must be unpinned before moving them.");
     }
@@ -284,23 +318,39 @@ async function applyGroups(rows, destinationIds) {
   }
 }
 
+function rowChangesState(plan, row) {
+  return (
+    row.close ||
+    row.groupTitle !== "" ||
+    (row.movable && row.destinationKey !== `existing:${row.windowId}`) ||
+    Boolean(plan.options?.removeExistingGroups && row.currentGroupId !== -1)
+  );
+}
+
 async function applyPlan(plan) {
+  await assertPlanWasPreviewed(plan);
   validatePlan(plan);
 
+  // Unrelated tabs closing must not invalidate the plan; only tabs the plan
+  // actually changes make it stale.
   const liveRows = [];
   const missingTabIds = [];
   for (const row of plan.rows) {
     if (await tabExists(row.tabId)) liveRows.push(row);
-    else missingTabIds.push(row.tabId);
+    else if (rowChangesState(plan, row)) missingTabIds.push(row.tabId);
   }
   if (missingTabIds.length) {
+    await clearPendingPlan();
     throw new Error(
       `The plan is stale because ${missingTabIds.length} tab${
         missingTabIds.length === 1 ? "" : "s"
       } changed. Refresh and preview it again.`,
     );
   }
-  if (!liveRows.length) throw new Error("None of the planned tabs still exist.");
+  if (!liveRows.length) {
+    await clearPendingPlan();
+    throw new Error("None of the planned tabs still exist.");
+  }
 
   const referencedExistingKeys = new Set(
     liveRows
@@ -316,6 +366,7 @@ async function applyPlan(plan) {
       referencedExistingKeys.has(destination.key) &&
       !(await windowExists(destination.windowId))
     ) {
+      await clearPendingPlan();
       throw new Error(
         `Destination window ${destination.windowId} no longer exists. Refresh and preview the plan again.`,
       );
@@ -401,6 +452,7 @@ async function applyPlan(plan) {
   execution.completedAt = Date.now();
   snapshot.execution = execution;
   await chrome.storage.local.set({ [SNAPSHOT_KEY]: snapshot });
+  await clearPendingPlan();
 
   return {
     inventory: await getInventory(),
@@ -612,6 +664,8 @@ async function previewAgentPlan(proposal) {
   const inventory = await getInventory();
   const plan = buildAgentPlan(inventory, proposal);
   validatePlan(plan);
+  plan.applyToken = crypto.randomUUID();
+  await storePendingPlan(plan);
   return {
     plan,
     summary: plan.summary,
@@ -649,7 +703,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   };
 
   const handler = handlers[message?.type];
-  if (!handler) return false;
+  if (!handler) {
+    sendResponse({
+      ok: false,
+      error: `Unknown message type "${message?.type}". Tab Steward may be running an outdated build; reload it from chrome://extensions and retry.`,
+    });
+    return false;
+  }
 
   handler()
     .then((result) => sendResponse({ ok: true, result }))

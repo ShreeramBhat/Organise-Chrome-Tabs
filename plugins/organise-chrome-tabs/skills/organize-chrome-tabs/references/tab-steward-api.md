@@ -29,7 +29,24 @@ Follow these rules exactly:
    tool arguments.
 7. Omit the dashboard tab from assignments so it remains in its current window.
    Moving the evaluated dashboard tab can detach its DevTools target before the
-   apply response returns.
+   apply response returns. The extension also rejects proposals that move or
+   close it.
+8. Treat an `undefined` response from `chrome.runtime.sendMessage` as a stale
+   extension build. Stop and ask the user to reload Tab Steward from
+   `chrome://extensions`; do not improvise a workaround. Builds 0.3.0 and newer
+   answer every message, including unknown types, with an explicit `{ok, error}`
+   object.
+9. Never click dashboard buttons. **Apply plan**, **Undo**, and **Close** open
+   blocking `confirm()` dialogs that freeze the page and hang every later
+   `evaluate_script` call against it. The dashboard refreshes itself after
+   API-driven changes; it never needs a scripted click.
+
+## Version handshake
+
+`GET_INVENTORY` returns a top-level `version` field with the running extension
+build. Require `0.3.0` or newer before planning. If the field is missing, or
+any message resolves to `undefined`, the loaded build predates this API: report
+that to the user, ask them to reload the unpacked extension, and stop.
 
 ## Extension discovery
 
@@ -124,6 +141,11 @@ itself. Reusing the same `newWindow` label sends those tabs to one new window.
 `PREVIEW_AGENT_PLAN` returns `{plan, summary, capturedAt}`. Present the summary
 and any implicit source-window closures before applying.
 
+The returned plan carries an `applyToken`, and the extension keeps its own copy
+of the canonical plan. `APPLY_PLAN` only accepts a plan identical to the most
+recent preview: an edited, rebuilt, or never-previewed plan is rejected. Each
+preview replaces the previous pending plan.
+
 ## Apply the cached canonical plan
 
 Use a no-argument function. Verify live IDs, memberships, and URLs immediately
@@ -141,21 +163,22 @@ async () => {
     throw new Error(inventoryResponse?.error || "Inventory failed");
   }
 
-  const liveTabs = inventoryResponse.result.windows.flatMap(
-    (window) => window.tabs,
+  const liveById = new Map(
+    inventoryResponse.result.windows
+      .flatMap((window) => window.tabs)
+      .map((tab) => [tab.id, tab]),
   );
-  const liveById = new Map(liveTabs.map((tab) => [tab.id, tab]));
-  const changed =
-    liveTabs.length !== plan.rows.length ||
-    plan.rows.some((row) => {
-      const live = liveById.get(row.tabId);
-      return (
-        !live ||
-        live.windowId !== row.windowId ||
-        live.url !== row.url
-      );
-    });
-  if (changed) {
+  const changingRows = plan.rows.filter(
+    (row) =>
+      row.close ||
+      row.groupTitle ||
+      row.destinationKey !== `existing:${row.windowId}`,
+  );
+  const stale = changingRows.some((row) => {
+    const live = liveById.get(row.tabId);
+    return !live || live.windowId !== row.windowId || live.url !== row.url;
+  });
+  if (stale) {
     delete globalThis.__tabStewardCanonicalPlan;
     delete globalThis.__tabStewardPreview;
     throw new Error("Chrome changed after preview; classify and preview again.");
@@ -174,7 +197,14 @@ async () => {
 ```
 
 Do not pass the plan through `evaluate_script.args`. Do not rebuild it from the
-summary or original proposal.
+summary or original proposal; the extension rejects any plan that does not
+match its stored preview.
+
+Check staleness only for the tabs the plan changes. Unrelated tabs navigate,
+redirect, and close constantly; requiring the whole browser to stay frozen
+between preview and apply makes applying impossible. The extension runs the
+same scoped check and rejects the plan if a changed tab vanished, clearing its
+pending preview so the next apply demands a fresh one.
 
 ## Verification
 
