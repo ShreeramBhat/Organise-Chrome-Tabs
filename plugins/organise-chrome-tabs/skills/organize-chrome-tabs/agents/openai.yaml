@@ -1,13 +1,13 @@
 interface:
   display_name: "Organize Chrome Tabs"
-  short_description: "Safely sort Chrome tabs into topic windows"
-  default_prompt: "Use $organize-chrome-tabs to organize my Chrome tabs into topic-based windows without closing anything."
+  short_description: "AI-classified Chrome topic windows"
+  default_prompt: "Use $organize-chrome-tabs to classify my live Chrome tabs yourself, preview a safe topic-window plan, and apply it without closing anything."
 
 dependencies:
   tools:
     - type: "mcp"
       value: "chrome-devtools"
-      description: "Inspect live Chrome pages and operate the Tab Steward extension dashboard"
+      description: "Inspect live Chrome pages and call Tab Steward's preview-and-apply API from its dashboard"
 
 policy:
   allow_implicit_invocation: true
