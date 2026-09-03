@@ -49,7 +49,10 @@ test("cross-swapping the last tabs does not lose either destination window", asy
     },
   });
 
-  const result = await mock.dispatch({ type: "APPLY_PLAN", plan: preview.plan });
+  const result = await mock.dispatch({
+    type: "APPLY_PREVIEWED_PLAN",
+    applyToken: preview.applyToken,
+  });
   assert.equal(result.inventory.windows.length, 2);
   assert.equal(
     result.inventory.windows

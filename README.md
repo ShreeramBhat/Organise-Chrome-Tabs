@@ -182,8 +182,8 @@ const preview = await chrome.runtime.sendMessage({
 });
 
 const applied = await chrome.runtime.sendMessage({
-  type: "APPLY_PLAN",
-  plan: preview.result.plan,
+  type: "APPLY_PREVIEWED_PLAN",
+  applyToken: preview.result.applyToken,
 });
 ```
 
@@ -198,9 +198,13 @@ for the complete message table and recovery semantics.
 
 ## Safety model
 
-- **Preview first, enforced:** `PREVIEW_AGENT_PLAN` validates a proposal
-  without changing Chrome, and `APPLY_PLAN` only accepts the exact plan returned
-  by the most recent preview.
+- **Preview first, enforced:** `PREVIEW_AGENT_PLAN` validates a proposal without
+  changing Chrome and stores the canonical plan inside the extension.
+  `APPLY_PREVIEWED_PLAN` accepts only the pending token from the most recent
+  preview, then applies that exact stored plan.
+- **Scoped staleness checks:** before mutation, the extension verifies that each
+  affected tab still has the previewed ID, window, URL, pinned state, and group.
+  Unrelated tab churn does not invalidate the plan.
 - **Single mutation boundary:** only Tab Steward calls Chrome's tab, group, and
   window APIs.
 - **No host permissions:** the extension cannot read page bodies.

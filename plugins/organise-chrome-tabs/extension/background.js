@@ -12,7 +12,11 @@ function planStore() {
 
 async function storePendingPlan(plan) {
   await planStore().set({
-    [PENDING_PLAN_KEY]: { planJson: JSON.stringify(plan), storedAt: Date.now() },
+    [PENDING_PLAN_KEY]: {
+      applyToken: plan.applyToken,
+      planJson: JSON.stringify(plan),
+      storedAt: Date.now(),
+    },
   });
 }
 
@@ -24,13 +28,36 @@ async function assertPlanWasPreviewed(plan) {
   const stored = (await planStore().get(PENDING_PLAN_KEY))[PENDING_PLAN_KEY];
   if (!stored) {
     throw new Error(
-      "No previewed plan is pending. Send PREVIEW_AGENT_PLAN first, then apply the returned canonical plan unchanged.",
+      "No previewed plan is pending. Send PREVIEW_AGENT_PLAN first, then apply the returned canonical plan unchanged. New clients should use APPLY_PREVIEWED_PLAN with the returned token.",
     );
   }
   if (JSON.stringify(plan) !== stored.planJson) {
     throw new Error(
       "This plan does not match the previewed canonical plan. Preview again and apply the returned plan unchanged.",
     );
+  }
+}
+
+async function getPendingPlan(applyToken) {
+  if (typeof applyToken !== "string" || !applyToken) {
+    throw new Error("A valid preview apply token is required.");
+  }
+  const stored = (await planStore().get(PENDING_PLAN_KEY))[PENDING_PLAN_KEY];
+  if (!stored) {
+    throw new Error(
+      "No previewed plan is pending. Send PREVIEW_AGENT_PLAN first, then apply its token.",
+    );
+  }
+  if (stored.applyToken !== applyToken) {
+    throw new Error(
+      "This apply token does not match the most recent preview. Preview again.",
+    );
+  }
+  try {
+    return JSON.parse(stored.planJson);
+  } catch {
+    await clearPendingPlan();
+    throw new Error("The stored preview is invalid. Preview the plan again.");
   }
 }
 
@@ -334,16 +361,26 @@ async function applyPlan(plan) {
   // Unrelated tabs closing must not invalidate the plan; only tabs the plan
   // actually changes make it stale.
   const liveRows = [];
-  const missingTabIds = [];
+  const changedTabIds = [];
   for (const row of plan.rows) {
-    if (await tabExists(row.tabId)) liveRows.push(row);
-    else if (rowChangesState(plan, row)) missingTabIds.push(row.tabId);
+    const live = await tabExists(row.tabId);
+    if (live) liveRows.push(row);
+    if (
+      rowChangesState(plan, row) &&
+      (!live ||
+        live.windowId !== row.windowId ||
+        (live.url || live.pendingUrl || "") !== row.url ||
+        live.pinned !== row.pinned ||
+        live.groupId !== row.currentGroupId)
+    ) {
+      changedTabIds.push(row.tabId);
+    }
   }
-  if (missingTabIds.length) {
+  if (changedTabIds.length) {
     await clearPendingPlan();
     throw new Error(
-      `The plan is stale because ${missingTabIds.length} tab${
-        missingTabIds.length === 1 ? "" : "s"
+      `The plan is stale because ${changedTabIds.length} tab${
+        changedTabIds.length === 1 ? "" : "s"
       } changed. Refresh and preview it again.`,
     );
   }
@@ -459,6 +496,11 @@ async function applyPlan(plan) {
     execution,
     message: `Organized ${liveRows.length} tabs.`,
   };
+}
+
+async function applyPreviewedPlan(applyToken) {
+  const plan = await getPendingPlan(applyToken);
+  return applyPlan(plan);
 }
 
 async function restoreGroups(snapshotTabs, restoredTabIdsByOriginalId) {
@@ -660,17 +702,21 @@ async function focusWindow(windowId) {
   return true;
 }
 
-async function previewAgentPlan(proposal) {
+async function previewAgentPlan(proposal, { includePlan = false } = {}) {
   const inventory = await getInventory();
   const plan = buildAgentPlan(inventory, proposal);
   validatePlan(plan);
   plan.applyToken = crypto.randomUUID();
   await storePendingPlan(plan);
-  return {
-    plan,
+  const result = {
+    applyToken: plan.applyToken,
     summary: plan.summary,
     capturedAt: inventory.capturedAt,
   };
+  // Compatibility escape hatch for older callers. New callers should use the
+  // token protocol so large tab inventories never cross runtime messaging twice.
+  if (includePlan) result.plan = plan;
+  return result;
 }
 
 async function openDashboard() {
@@ -692,7 +738,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const handlers = {
     GET_INVENTORY: getInventory,
     GET_UNDO_STATE: getUndoState,
-    PREVIEW_AGENT_PLAN: () => previewAgentPlan(message.proposal),
+    PREVIEW_AGENT_PLAN: () =>
+      previewAgentPlan(message.proposal, {
+        includePlan: message.includePlan === true,
+      }),
+    APPLY_PREVIEWED_PLAN: () => applyPreviewedPlan(message.applyToken),
     APPLY_PLAN: () => applyPlan(message.plan),
     UNDO_LAST: undoLastOrganization,
     CREATE_WINDOW: () => createWindow(message.label),

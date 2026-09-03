@@ -8,6 +8,7 @@ test("manifest is valid MV3 and requests only the expected permissions", async (
   );
 
   assert.equal(manifest.manifest_version, 3);
+  assert.equal(manifest.version, "0.4.0");
   assert.equal(manifest.background.service_worker, "background.js");
   assert.equal(manifest.background.type, "module");
   assert.deepEqual(

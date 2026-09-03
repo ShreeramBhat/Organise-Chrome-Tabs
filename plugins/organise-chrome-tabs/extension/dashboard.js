@@ -432,7 +432,9 @@ async function applyPlan() {
 
   setBusy(true, "Applying the reviewed plan…");
   try {
-    const result = await send("APPLY_PLAN", { plan: preview.plan });
+    const result = await send("APPLY_PREVIEWED_PLAN", {
+      applyToken: preview.applyToken,
+    });
     state.inventory = result.inventory;
     state.plan = null;
     elements.planSection.classList.add("hidden");

@@ -97,7 +97,7 @@ export function createChromeMock(seed) {
         return `chrome-extension://test-extension/${path}`;
       },
       getManifest() {
-        return { manifest_version: 3, name: "Tab Steward", version: "0.3.0" };
+        return { manifest_version: 3, name: "Tab Steward", version: "0.4.0" };
       },
       onMessage: {
         addListener(listener) {

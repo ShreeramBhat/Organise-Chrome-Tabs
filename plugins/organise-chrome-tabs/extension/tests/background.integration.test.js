@@ -47,7 +47,7 @@ test("service worker applies a previewed cross-window plan and restores it", asy
   const before = await mock.dispatch({ type: "GET_INVENTORY" });
   assert.equal(before.windows.length, 2);
   assert.equal(before.windows.flatMap((window) => window.tabs).length, 3);
-  assert.equal(before.version, "0.3.0");
+  assert.equal(before.version, "0.4.0");
 
   const preview = await mock.dispatch({
     type: "PREVIEW_AGENT_PLAN",
@@ -69,9 +69,13 @@ test("service worker applies a previewed cross-window plan and restores it", asy
       ],
     },
   });
-  assert.ok(preview.plan.applyToken);
+  assert.ok(preview.applyToken);
+  assert.equal("plan" in preview, false);
 
-  const applied = await mock.dispatch({ type: "APPLY_PLAN", plan: preview.plan });
+  const applied = await mock.dispatch({
+    type: "APPLY_PREVIEWED_PLAN",
+    applyToken: preview.applyToken,
+  });
   const appliedTabs = applied.inventory.windows.flatMap((window) => window.tabs);
   const movedOne = appliedTabs.find((tab) => tab.id === 1);
   const movedTwo = appliedTabs.find((tab) => tab.id === 2);
@@ -126,7 +130,8 @@ test("service worker previews an agent plan without mutating Chrome", async () =
 
   assert.equal(preview.summary.moveCount, 1);
   assert.equal(preview.summary.newWindowCount, 1);
-  assert.equal(preview.plan.source, "agent");
+  assert.ok(preview.applyToken);
+  assert.equal("plan" in preview, false);
 
   const afterPreview = await mock.dispatch({ type: "GET_INVENTORY" });
   assert.deepEqual(afterPreview.windows, before.windows);
@@ -136,8 +141,8 @@ test("service worker previews an agent plan without mutating Chrome", async () =
   );
 
   const applied = await mock.dispatch({
-    type: "APPLY_PLAN",
-    plan: preview.plan,
+    type: "APPLY_PREVIEWED_PLAN",
+    applyToken: preview.applyToken,
   });
   const moved = applied.inventory.windows
     .flatMap((window) => window.tabs)
@@ -158,6 +163,7 @@ test("apply rejects plans that were not previewed or were tampered with", async 
 
   const preview = await mock.dispatch({
     type: "PREVIEW_AGENT_PLAN",
+    includePlan: true,
     proposal: {
       version: 1,
       assignments: [{ tabId: 2, destination: { newWindow: "Notes" } }],
@@ -170,6 +176,37 @@ test("apply rejects plans that were not previewed or were tampered with", async 
     mock.dispatch({ type: "APPLY_PLAN", plan: tampered }),
     /does not match/,
   );
+});
+
+test("a newer preview invalidates the previous apply token", async () => {
+  const first = await mock.dispatch({
+    type: "PREVIEW_AGENT_PLAN",
+    proposal: {
+      version: 1,
+      assignments: [{ tabId: 2, destination: { newWindow: "First" } }],
+    },
+  });
+  const second = await mock.dispatch({
+    type: "PREVIEW_AGENT_PLAN",
+    proposal: {
+      version: 1,
+      assignments: [{ tabId: 2, destination: { newWindow: "Second" } }],
+    },
+  });
+
+  await assert.rejects(
+    mock.dispatch({
+      type: "APPLY_PREVIEWED_PLAN",
+      applyToken: first.applyToken,
+    }),
+    /most recent preview/,
+  );
+
+  await mock.dispatch({
+    type: "APPLY_PREVIEWED_PLAN",
+    applyToken: second.applyToken,
+  });
+  await mock.dispatch({ type: "UNDO_LAST" });
 });
 
 test("proposals cannot move or close the dashboard tab", async () => {

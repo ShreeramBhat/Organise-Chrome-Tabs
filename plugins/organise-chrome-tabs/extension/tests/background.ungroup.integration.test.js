@@ -42,7 +42,10 @@ test("apply removes existing groups in the same undoable operation", async () =>
       ],
     },
   });
-  await mock.dispatch({ type: "APPLY_PLAN", plan: groupPreview.plan });
+  await mock.dispatch({
+    type: "APPLY_PREVIEWED_PLAN",
+    applyToken: groupPreview.applyToken,
+  });
   const grouped = await mock.dispatch({ type: "GET_INVENTORY" });
   const groupedTabs = grouped.windows.flatMap((window) => window.tabs);
   assert.ok(groupedTabs.every((tab) => tab.groupId !== -1));
@@ -56,8 +59,8 @@ test("apply removes existing groups in the same undoable operation", async () =>
     },
   });
   const result = await mock.dispatch({
-    type: "APPLY_PLAN",
-    plan: ungroupPreview.plan,
+    type: "APPLY_PREVIEWED_PLAN",
+    applyToken: ungroupPreview.applyToken,
   });
   const ungroupedTabs = result.inventory.windows.flatMap(
     (window) => window.tabs,

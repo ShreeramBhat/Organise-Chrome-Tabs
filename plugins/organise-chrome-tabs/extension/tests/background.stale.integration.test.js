@@ -28,6 +28,31 @@ const mock = createChromeMock({
           title: "Unrelated reading",
           url: "https://example.com/reading",
         },
+        {
+          id: 4,
+          index: 3,
+          title: "Stable article",
+          url: "https://example.com/stable",
+        },
+        {
+          id: 5,
+          index: 4,
+          title: "Window-sensitive article",
+          url: "https://example.com/window-sensitive",
+        },
+      ],
+    },
+    {
+      id: 20,
+      focused: false,
+      tabs: [
+        {
+          id: 6,
+          index: 0,
+          active: true,
+          title: "Destination anchor",
+          url: "https://example.com/destination",
+        },
       ],
     },
   ],
@@ -53,14 +78,14 @@ test("unrelated tab churn after preview does not invalidate the plan", async () 
   await mock.chrome.tabs.remove(3);
 
   const applied = await mock.dispatch({
-    type: "APPLY_PLAN",
-    plan: preview.plan,
+    type: "APPLY_PREVIEWED_PLAN",
+    applyToken: preview.applyToken,
   });
   const moved = applied.inventory.windows
     .flatMap((window) => window.tabs)
     .find((tab) => tab.id === 1);
   assert.notEqual(moved.windowId, 10);
-  assert.equal(applied.inventory.windows.length, 2);
+  assert.equal(applied.inventory.windows.length, 3);
 });
 
 test("apply rejects a stale preview when a planned tab vanishes", async () => {
@@ -81,8 +106,8 @@ test("apply rejects a stale preview when a planned tab vanishes", async () => {
 
   await assert.rejects(
     mock.dispatch({
-      type: "APPLY_PLAN",
-      plan: preview.plan,
+      type: "APPLY_PREVIEWED_PLAN",
+      applyToken: preview.applyToken,
     }),
     /plan is stale/,
   );
@@ -91,9 +116,53 @@ test("apply rejects a stale preview when a planned tab vanishes", async () => {
   // demand a fresh preview instead of running against the changed browser.
   await assert.rejects(
     mock.dispatch({
-      type: "APPLY_PLAN",
-      plan: preview.plan,
+      type: "APPLY_PREVIEWED_PLAN",
+      applyToken: preview.applyToken,
     }),
     /previewed/,
+  );
+});
+
+test("apply rejects a stale preview when a planned tab navigates", async () => {
+  const preview = await mock.dispatch({
+    type: "PREVIEW_AGENT_PLAN",
+    proposal: {
+      version: 1,
+      assignments: [
+        { tabId: 4, destination: { newWindow: "Stable Research" } },
+      ],
+    },
+  });
+
+  await mock.chrome.tabs.update(4, { url: "https://example.com/changed" });
+
+  await assert.rejects(
+    mock.dispatch({
+      type: "APPLY_PREVIEWED_PLAN",
+      applyToken: preview.applyToken,
+    }),
+    /plan is stale/,
+  );
+});
+
+test("apply rejects a stale preview when a planned tab changes windows", async () => {
+  const preview = await mock.dispatch({
+    type: "PREVIEW_AGENT_PLAN",
+    proposal: {
+      version: 1,
+      assignments: [
+        { tabId: 5, destination: { newWindow: "Window Research" } },
+      ],
+    },
+  });
+
+  await mock.chrome.tabs.move(5, { windowId: 20, index: -1 });
+
+  await assert.rejects(
+    mock.dispatch({
+      type: "APPLY_PREVIEWED_PLAN",
+      applyToken: preview.applyToken,
+    }),
+    /plan is stale/,
   );
 });

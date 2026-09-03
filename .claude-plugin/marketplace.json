@@ -10,7 +10,7 @@
       "name": "organise-chrome-tabs",
       "source": "./plugins/organise-chrome-tabs",
       "description": "Safely inspect and organise live Chrome tabs into topic-based windows with Chrome DevTools MCP and the Tab Steward extension.",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "category": "productivity",
       "keywords": [
         "chrome",
