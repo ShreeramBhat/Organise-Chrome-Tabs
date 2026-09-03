@@ -1,7 +1,7 @@
 interface:
   display_name: "Organize Chrome Tabs"
-  short_description: "AI-classified Chrome topic windows"
-  default_prompt: "Use $organize-chrome-tabs to classify my live Chrome tabs yourself, preview a safe topic-window plan, and apply it without closing anything."
+  short_description: "AI-classified Chrome windows capped at 10 tabs"
+  default_prompt: "Use $organize-chrome-tabs to classify my live tabs, keep each topic window at 10 tabs or fewer, preview the plan, and apply it safely with Tab Steward without reloading, activating, muting, or unmuting any tab."
 
 dependencies:
   tools:
