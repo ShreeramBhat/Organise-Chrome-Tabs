@@ -9,35 +9,6 @@ canonicalization, Chrome mutations, and undo.
 Do not click **Analyse tabs** or import `lib/classifier.js` or `lib/planner.js`
 in AI-driven mode. Those components are the manual local fallback.
 
-## Tab preservation
-
-Chrome discards or freezes background tabs to save memory. A discarded tab has
-no renderer and **reloads when activated**, and a reloaded page may autoplay
-with sound once the origin passes the user's Media Engagement Index threshold.
-Every rule below exists to keep the agent from waking a tab.
-
-- The dashboard tab is the **only** permitted DevTools target. Never run
-  `evaluate_script`, `take_snapshot`, `wait_for`, or `navigate_page` against a
-  content tab, and never `select_page({bringToFront: true})` one.
-- Do not build inventory from `list_pages`. It attaches per-target, can hang on
-  frozen tabs, and the known workaround is `Target.activateTarget` — the exact
-  reload to avoid. Use `GET_INVENTORY`.
-- `GET_INVENTORY` proxies `chrome.tabs.query`, so `id`, `url`, `title`,
-  `discarded`, `audible`, and `mutedInfo` are all available for discarded tabs
-  **without loading them**. The DevTools page list may show unloaded tabs as
-  bare URLs with no title; the inventory does not.
-- Never send `chrome.tabs.update` with `muted`, and never set
-  `autoDiscardable`. Audio and memory state belong to the user.
-- Moves are renderer-free and safe. Creating a window is not: its first tab
-  becomes active. Give every new window a blank `chrome://newtab/` lead tab, or
-  order assignments so no content tab is left active there.
-- Resolve ambiguous tabs out of band. For YouTube, fetch
-  `https://www.youtube.com/oembed?url=<watch-url>&format=json` from your own
-  network stack for the real title and channel. If a tab still cannot be
-  classified, stop and ask the user before loading it.
-- After apply, assert that no tab's `mutedInfo.muted` changed and that no
-  previously `discarded` tab became loaded.
-
 ## Chrome DevTools connector contract
 
 Follow these rules exactly:
@@ -47,9 +18,8 @@ Follow these rules exactly:
    never by navigating a content tab.
 2. Run extension messages with `evaluate_script` in dashboard context.
 3. Use no-argument evaluated functions for all message calls.
-4. Do **not** use `evaluate_script.args` to pass a proposal, token, JSON string,
-   tab ID, or window ID. In this connector, `args` entries identify DOM elements
-   by snapshot UID; arbitrary JSON is interpreted as an element UID and fails.
+4. Do **not** use `evaluate_script.args` for API data. Connector versions differ
+   in argument handling; a no-argument function avoids that incompatibility.
 5. Put the small, AI-authored proposal directly in the no-argument function as a
    JavaScript literal. If generating the function programmatically, serialize
    only agent-owned numeric IDs, booleans, group colors, and reviewed topic
@@ -62,8 +32,8 @@ Follow these rules exactly:
    apply response returns. The extension also rejects proposals that move or
    close it.
 8. Treat an `undefined` response from `chrome.runtime.sendMessage` as a stale
-   extension build. Stop and ask the user to reload Tab Steward from
-   `chrome://extensions`; do not improvise a workaround. Builds 0.4.0 and newer
+   extension build. Stop and ask the user to reload Tab Steward;
+   do not improvise a workaround. Builds 0.4.0 and newer
    answer every message, including unknown types, with an explicit `{ok, error}`
    object.
 9. Never click dashboard buttons. **Apply plan**, **Undo**, and **Close** open
@@ -73,7 +43,7 @@ Follow these rules exactly:
 
 ## Version handshake
 
-`GET_INVENTORY` returns a top-level `version` field with the running extension
+`GET_INVENTORY` returns `response.result.version` with the running extension
 build. Require `0.4.0` or newer before planning. If the field is missing, or
 any message resolves to `undefined`, the loaded build predates this API: report
 that to the user, ask them to reload the unpacked extension, and stop.
@@ -86,10 +56,40 @@ The dashboard URL is:
 chrome-extension://<extension-id>/dashboard.html
 ```
 
-Reuse an existing dashboard page. Otherwise discover **Tab Steward** through
-`chrome://extensions` and derive the current ID. Never hardcode an unpacked
-extension ID.
+Start the connector with `--autoConnect --categoryExtensions`. Without the
+extension flag, extension targets are hidden and `new_page` rejects dashboard
+URLs. This is distinct from a missing Tab Steward runtime version.
 
+Reuse a dashboard ID already known in this connector session or a recent target
+listing. If none is known, use `list_extensions` to find the enabled Tab Steward
+ID. This extension-enabled tool was verified against the live browser. If that
+tool is unavailable, use the read-only local discovery helper from this skill
+directory:
+
+```sh
+python3 scripts/discover_extension.py
+```
+
+For a non-default Chrome data directory, supply `--user-data-dir <path>`.
+The helper reads Preferences/Secure Preferences and the registered extension
+manifest, returning only matching Tab Steward metadata. It does not load tabs,
+modify Chrome settings or print unrelated preferences. Multiple candidates are
+not proof of the active profile: match the connector's configured profile, or
+clarify if that cannot be determined. The dashboard handshake confirms the
+running version; an on-disk version alone does not.
+
+If no recent target listing is available, one `list_pages` call may be used
+solely to locate an existing dashboard. It can be slow; do not repeat it or use
+its content entries for classification, and never activate targets to unstick it.
+If no dashboard exists, open the discovered URL with
+`new_page({url, background: true})` and use its returned page ID. Avoid repeated `list_pages`: even opening a page may
+produce a full page list, so consume only the dashboard ID. Page IDs belong to
+that connector session and differ from native Chrome tab IDs in inventory.
+Do not hardcode either kind of ID into the skill.
+
+If the running connector lacks the flag, updating its launch configuration takes
+effect after reconnecting. An available extension-enabled connection is usable;
+do not restart Chrome or change content tabs to solve connector configuration.
 Runtime messages must be sent from the dashboard extension context.
 
 ## Messages
@@ -116,9 +116,22 @@ Use a no-argument evaluated function:
 async () => {
   const response = await chrome.runtime.sendMessage({ type: "GET_INVENTORY" });
   if (!response?.ok) throw new Error(response?.error || "Inventory failed");
-  return response.result;
+  if (!response.result?.version) throw new Error("Missing runtime version");
+  globalThis.__tabStewardBefore = response.result;
+  return {
+    version: response.result.version,
+    windows: response.result.windows.map(w => ({
+      id: w.id, label: w.label,
+      tabs: w.tabs.map(({id, title, url, pinned, groupId, active, discarded}) =>
+        ({id, title, url, pinned, groupId, active, discarded}))
+    }))
+  };
 }
 ```
+
+Retain the complete baseline in the dashboard and return compact output. Some
+0.4.0 builds omit `mutedInfo`; do not report a comparison unless both inventories
+contain it or a separate read-only metadata baseline was captured.
 
 ## Preview an AI proposal
 
@@ -168,6 +181,12 @@ Each assignment supports:
 
 Pinned tabs cannot move or join native groups. The dashboard cannot close
 itself. Reusing the same `newWindow` label sends those tabs to one new window.
+For tab-preserving organization on 0.4.0, follow the main skill's persistent
+blank lead procedure instead: `CREATE_WINDOW` first, then `{windowId}`. A
+`CREATE_WINDOW` result is an inventory, not a direct window object; compare its
+window IDs with the cached inventory, store the new window and blank tab IDs,
+and return only those IDs. Do not print an entire inventory for every creation.
+Creating/renaming several windows must be sequential: labels share storage.
 
 `PREVIEW_AGENT_PLAN` returns `{applyToken, summary, capturedAt}`. Present the
 summary and any implicit source-window closures before applying. The extension
@@ -197,7 +216,10 @@ async () => {
 
   delete globalThis.__tabStewardApplyToken;
   delete globalThis.__tabStewardPreview;
-  return response.result;
+  return {
+    message: response.result.message,
+    execution: response.result.execution,
+  };
 }
 ```
 
@@ -214,8 +236,9 @@ the next apply demands a fresh preview.
 
 ## Verification
 
-Request `GET_INVENTORY` again and compare pre/post state by tab ID. Moved tabs
-retain IDs; tabs reopened by undo receive new IDs.
+Request `GET_INVENTORY` again and compare pre/post state by tab ID. Keep the
+original baseline: do not rerun the initial caching example and overwrite it.
+Moved tabs retain IDs; tabs reopened by undo receive new IDs.
 
 Verify:
 
@@ -226,7 +249,9 @@ Verify:
 - pinned tabs stayed put;
 - native groups match the approved plan;
 - duplicates remain unless closure was separately approved;
-- no placeholder, empty, or accidental dashboard window remains.
+- only deliberately retained blank lead tabs remain; no unexplained additions;
+- original active tabs remain active and discarded tabs were not woken;
+- available audio metadata matches the baseline (report unavailable fields).
 
 If the dashboard target closes during apply or the tool returns an unknown
 result, do not retry. Reopen or reselect the dashboard, read inventory, compare

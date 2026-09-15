@@ -7,7 +7,7 @@ dependencies:
   tools:
     - type: "mcp"
       value: "chrome-devtools"
-      description: "Inspect live Chrome pages and call Tab Steward's preview-and-apply API from its dashboard"
+      description: "Read Tab Steward inventory and call Tab Steward's preview-and-apply API from its dashboard"
 
 policy:
   allow_implicit_invocation: true
