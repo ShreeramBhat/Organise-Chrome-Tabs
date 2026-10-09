@@ -2,7 +2,8 @@
 name: organize-chrome-tabs
 description: >-
   Semantically classify and organize or organise live Google Chrome tabs and
-  windows with Chrome DevTools and Tab Steward. Use when asked to inventory,
+  windows with Tab Steward, driven through Claude in Chrome (Claude agents) or
+  Chrome DevTools (all other agents). Use when asked to inventory,
   describe, sort, triage, move, consolidate, clean, or reorganize Chrome tabs;
   create, focus, label, or close Chrome windows; remove native tab groups;
   identify duplicates; distinguish pages from the same site by topic; or
@@ -16,9 +17,52 @@ description: >-
 # Organize Chrome Tabs
 
 Use Tab Steward for inventory and native tab/window operations. The AI owns all
-semantic classification and destination decisions. Use Chrome DevTools only on
-the Tab Steward dashboard; never use the dashboard's local **Analyse tabs**
+semantic classification and destination decisions. Use the browser connector
+only on the Tab Steward dashboard; never use the dashboard's local **Analyse tabs**
 classifier unless the user explicitly requests that manual fallback.
+
+## Browser connector
+
+Pick the connector by agent, once, before any browser call:
+
+- **Claude** (Claude Code, Claude desktop, any Claude agent): use the built-in
+  **Claude in Chrome** connector (`mcp__claude-in-chrome__*`). Do not use the
+  Chrome DevTools MCP server for this skill, even if it is configured.
+- **Every other agent** (Codex and the rest): use the **Chrome DevTools** MCP
+  server started with `--autoConnect --categoryExtensions`.
+
+Both drive the same Tab Steward messages from the dashboard page. Only the
+transport differs; see the connector contracts in
+[the API reference](references/tab-steward-api.md). If the chosen connector is
+unavailable or refuses the dashboard URL, stop and report it. Do not silently
+switch to the other connector, and never fall back to Computer Use or
+coordinate automation.
+
+### Claude in Chrome specifics
+
+- Claude in Chrome acts only on tabs in its own MCP tab group. Content tabs are
+  outside that group and must stay outside it: never add one, and never use
+  `navigate`, `read_page`, `find`, `get_page_text`, `computer`, or
+  `javascript_tool` on any tab except the dashboard.
+- Load the tools you need (`tabs_context_mcp`, `tabs_create_mcp`, `navigate`,
+  `javascript_tool`, `tabs_close_mcp`) in one ToolSearch call.
+- Find the dashboard URL with `scripts/discover_extension.py`. Claude in Chrome
+  cannot open `chrome://extensions`.
+- `tabs_context_mcp({createIfEmpty: true})` opens a new window holding one blank
+  tab in Claude's group. That blank tab is the window's active tab, so no content
+  tab is woken. Navigate **that** blank tab to the dashboard URL. That window is
+  the **Browser Tools** window and counts toward the 10-tab cap.
+- `javascript_tool` uses REPL semantics: write each API call as
+  `await (async () => { ... })()` so its value is the last expression. Never
+  use a bare top-level `return`.
+- Claude's tab group is a native group, and Tab Steward 0.4.0 ungroups every
+  grouped, unpinned tab (the dashboard included) when `removeExistingGroups` is
+  true. That would pull the dashboard out of Claude's group mid-run. On this
+  route, send `removeExistingGroups: false`. Tabs that move windows still lose
+  their old group. Report any user groups that remain on tabs that stay put.
+  Exclude Claude's own group from group counts and verification.
+- After verification, close the dashboard tab with `tabs_close_mcp`. That also
+  removes Claude's group and window. Keep it open only if the user asks.
 
 ## Fast path
 
@@ -26,14 +70,14 @@ Aim to finish an ordinary organization run in about five minutes once the
 connector is ready. This is a pacing target, not permission to skip verification.
 Read [the API reference](references/tab-steward-api.md) once before operating.
 
-1. **Connect once.** Require an extension-enabled Chrome DevTools connector
-   (`--categoryExtensions`). Reuse one Chrome connection for discovery,
-   inventory, preview, apply and verification; do not start a new connection
-   for each call. Reconnect only if that connection fails or needs a setup fix.
-   Reuse a known dashboard target. Otherwise use
-   extension discovery described in the API reference and open the dashboard
-   in a background tab. Do not inventory content with `list_pages`: it can be
-   slow and omit titles. Take one dashboard snapshot.
+1. **Connect once.** Use the connector chosen under Browser connector. Reuse
+   one connection and one dashboard tab for discovery, inventory, preview,
+   apply and verification. Reconnect only if that connection fails or needs a
+   setup fix. Open the dashboard as described in the API reference: a
+   background tab for DevTools, or Claude's blank group tab for Claude in
+   Chrome. Never navigate a content tab. Do not inventory content with
+   `list_pages`: it can be slow and omit titles. On DevTools, take one
+   dashboard snapshot.
 2. **Inventory once.** Call `GET_INVENTORY`, validate `response.result.version`
    (0.4.0+), and cache the complete result on dashboard `globalThis`. Return a
    compact table of window ID/label and tab ID/title/URL/pinned/group/active/
@@ -81,7 +125,8 @@ or only the standalone skill leaves other invocations stale.
   `mutedInfo`. Do not assert an unavailable field was verified. If audio-state
   comparison is needed, cache read-only `chrome.tabs.query({})` metadata from
   the dashboard before mutation and compare afterward.
-- Remove native groups in the same apply (`removeExistingGroups: true`).
+- Remove native groups in the same apply (`removeExistingGroups: true`). On
+  Claude in Chrome, use `false` instead (see Claude in Chrome specifics).
   Do not close duplicates automatically. Do not create native groups by default.
 
 ### New windows with persistent blank lead tabs
@@ -126,8 +171,11 @@ meaningful URL differences and distinguish video timestamp variants.
 ## Failure handling
 
 - Missing extension capability is a connector setup problem, not a stale Tab
-  Steward build. Use an available extension-enabled connector or explain the
-  required setup; do not retry blocked URLs or route through unrelated apps.
+  Steward build. On DevTools, the usual cause is a missing
+  `--categoryExtensions` flag. On Claude in Chrome, it means the connector
+  refused the `chrome-extension://` dashboard URL or the script. Explain the
+  required setup; do not retry blocked URLs, switch connectors silently, or
+  route through unrelated apps.
 - Missing runtime version or `undefined` API response: follow the API reference's
   reload requirement. Do not guess a message protocol.
 - Stale preview rejected before mutation: refresh inventory, update only changed

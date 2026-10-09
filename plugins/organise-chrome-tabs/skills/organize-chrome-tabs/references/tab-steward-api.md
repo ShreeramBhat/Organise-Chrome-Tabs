@@ -9,6 +9,50 @@ canonicalization, Chrome mutations, and undo.
 Do not click **Analyse tabs** or import `lib/classifier.js` or `lib/planner.js`
 in AI-driven mode. Those components are the manual local fallback.
 
+## Connector choice
+
+Claude agents use **Claude in Chrome** (`mcp__claude-in-chrome__*`). Every other
+agent uses **Chrome DevTools** (`chrome-devtools` MCP). Each contract below
+applies only to its own connector. The messages, proposal format, and
+verification are the same for both.
+
+## Claude in Chrome connector contract
+
+Follow these rules exactly:
+
+1. Get the dashboard URL from `python3 scripts/discover_extension.py`. Claude
+   in Chrome cannot open `chrome://extensions` or list extensions.
+2. Call `tabs_context_mcp`. If no group exists, call it again with
+   `createIfEmpty: true`. This opens a new window with one blank tab in Claude's
+   group, and that blank tab is active, so no content tab is woken. Navigate
+   that blank tab (by its `tabId`) to the dashboard URL. Never navigate, read,
+   or script a tab outside Claude's group. Only Claude's own group tabs can be
+   targeted anyway; do not add content tabs to it.
+3. Run every message with `javascript_tool` (`action: "javascript_exec"`,
+   `tabId`: the dashboard tab). The code uses REPL semantics: top-level `await`
+   works, and the last expression is the result. Wrap each function from this
+   reference as `await (async () => { ... })()`. A bare top-level `return` is a
+   syntax error.
+4. Put the AI-authored proposal in the code as a JavaScript literal. Apply the
+   same serialization rule as DevTools rule 5 below.
+5. Cache the `applyToken` on the dashboard's `globalThis`, as in DevTools.
+   Reusing the same dashboard `tabId` keeps the page and its globals alive.
+6. Omit the dashboard tab and every other Claude-group tab from assignments.
+   The inventory lists Claude's window and group like any other; treat them as
+   operational, not content.
+7. Send `removeExistingGroups: false`. Tab Steward 0.4.0 ungroups every
+   grouped, unpinned tab when it is true, including the protected dashboard.
+   That would pull the dashboard out of Claude's group and end Claude's access
+   to it before verification. Moved tabs still leave their old groups.
+8. An `undefined` response means a stale build (see DevTools rule 8). A refusal
+   to load the `chrome-extension://` URL, or to run script on it, is a connector
+   limitation. Stop and report it. Do not retry or switch connectors without the
+   user's approval.
+9. Never use `computer`, `find`, or `form_input` on the dashboard. Its buttons
+   open blocking `confirm()` dialogs (see DevTools rule 9).
+10. After verification, close the dashboard with `tabs_close_mcp`. That removes
+    Claude's group and its window. Keep it open only on request.
+
 ## Chrome DevTools connector contract
 
 Follow these rules exactly:
@@ -56,7 +100,10 @@ The dashboard URL is:
 chrome-extension://<extension-id>/dashboard.html
 ```
 
-Start the connector with `--autoConnect --categoryExtensions`. Without the
+On Claude in Chrome, use the local discovery helper below; the rest of this
+section is DevTools-specific.
+
+Start the DevTools connector with `--autoConnect --categoryExtensions`. Without the
 extension flag, extension targets are hidden and `new_page` rejects dashboard
 URLs. This is distinct from a missing Tab Steward runtime version.
 
@@ -110,7 +157,8 @@ Runtime messages must be sent from the dashboard extension context.
 
 ## Read inventory
 
-Use a no-argument evaluated function:
+Use a no-argument evaluated function. On Claude in Chrome, run the same body as
+`await (async () => { ... })()` (see that contract):
 
 ```js
 async () => {
@@ -236,7 +284,9 @@ the next apply demands a fresh preview.
 
 ## Verification
 
-Request `GET_INVENTORY` again and compare pre/post state by tab ID. Keep the
+Request `GET_INVENTORY` again and compare pre/post state by tab ID. On Claude in
+Chrome, exclude Claude's own window, group, and dashboard tab from the
+comparison, and expect user groups on tabs that stayed put to remain. Keep the
 original baseline: do not rerun the initial caching example and overwrite it.
 Moved tabs retain IDs; tabs reopened by undo receive new IDs.
 
